@@ -1,0 +1,5 @@
+source_service,target_service,dependency_type
+gateway-service,auth-service,HTTP
+gateway-service,order-service,HTTP
+order-service,inventory-service,gRPC
+order-service,payment-service,gRPC

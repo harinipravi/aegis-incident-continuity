@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGIS — Incident Continuity</title>
+    <link rel="stylesheet" href="/web/styles.css">
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-icon">⬡</div>
+            <div>
+                <h1>AEGIS</h1>
+                <span>Incident Continuity Platform</span>
+            </div>
+        </div>
+
+        <nav>
+            <button class="nav-item active">⌂ <span>Overview</span></button>
+            <button class="nav-item">◉ <span>Incidents</span></button>
+            <button class="nav-item">◈ <span>Services</span></button>
+            <button class="nav-item">⚠ <span>Alerts</span></button>
+            <button class="nav-item">◴ <span>RCA History</span></button>
+            <button class="nav-item">▤ <span>Reports</span></button>
+            <button class="nav-item">▣ <span>Runbooks</span></button>
+        </nav>
+
+        <div class="system-status">
+            <span class="status-dot"></span>
+            <div>
+                <strong>System Status</strong>
+                <small>All Systems Operational</small>
+            </div>
+        </div>
+    </aside>
+
+
+    <!-- Main -->
+    <main class="main">
+
+        <!-- Header -->
+        <header class="topbar">
+            <div>
+                <div class="incident-title">
+                    <span class="severity">P1</span>
+                    <h2>Incident — INC-006</h2>
+                    <span id="incidentStatus" class="badge investigating">
+                        INVESTIGATING
+                    </span>
+                </div>
+
+                <p class="subtitle">
+                    Service: <strong id="serviceName">order-service</strong>
+                    <span>•</span>
+                    Automated Incident RCA
+                </p>
+            </div>
+
+            <button id="generateRcaBtn" class="primary-btn">
+                ✦ Generate RCA
+            </button>
+        </header>
+
+
+        <!-- Metrics -->
+        <section class="metrics-grid">
+
+            <div class="metric-card">
+                <span>Error Rate</span>
+                <strong id="errorRate">—</strong>
+                <small>Incident anomaly</small>
+            </div>
+
+            <div class="metric-card">
+                <span>Latency</span>
+                <strong id="latency">—</strong>
+                <small>milliseconds</small>
+            </div>
+
+            <div class="metric-card">
+                <span>DB Connections</span>
+                <strong id="dbConnections">—</strong>
+                <small>active connections</small>
+            </div>
+
+            <div class="metric-card">
+                <span>RCA Confidence</span>
+                <strong id="confidence">—</strong>
+                <small>Gemini analysis</small>
+            </div>
+
+        </section>
+
+
+        <!-- Main dashboard grid -->
+        <section class="dashboard-grid">
+
+            <!-- RCA -->
+            <div class="panel rca-panel">
+
+                <div class="panel-header">
+                    <div>
+                        <span class="eyebrow">AI ANALYSIS</span>
+                        <h3>Root Cause Analysis</h3>
+                    </div>
+
+                    <span id="rcaStatus" class="status-pill">
+                        Waiting
+                    </span>
+                </div>
+
+                <div class="rca-section">
+                    <h4>Suspected Root Cause</h4>
+                    <p id="rootCause">
+                        Generate an RCA to analyze the incident evidence.
+                    </p>
+                </div>
+
+                <div class="rca-section">
+                    <h4>Evidence Summary</h4>
+                    <p id="evidenceSummary">
+                        Evidence from BigQuery will appear here.
+                    </p>
+                </div>
+
+                <div class="rca-section mitigation">
+                    <h4>Recommended Mitigation</h4>
+                    <p id="mitigation">
+                        —
+                    </p>
+                </div>
+
+            </div>
+
+
+            <!-- Incident Progress -->
+            <div class="panel">
+
+                <div class="panel-header">
+                    <div>
+                        <span class="eyebrow">WORKFLOW</span>
+                        <h3>Incident Progress</h3>
+                    </div>
+                </div>
+
+                <div class="timeline">
+
+                    <div class="timeline-item complete">
+                        <span class="timeline-dot">✓</span>
+                        <div>
+                            <strong>Incident Detected</strong>
+                            <small>INC-006 identified</small>
+                        </div>
+                    </div>
+
+                    <div class="timeline-item complete">
+                        <span class="timeline-dot">✓</span>
+                        <div>
+                            <strong>Evidence Collection</strong>
+                            <small>BigQuery evidence retrieved</small>
+                        </div>
+                    </div>
+
+                    <div id="rcaTimeline" class="timeline-item active">
+                        <span class="timeline-dot">3</span>
+                        <div>
+                            <strong>RCA Generated</strong>
+                            <small>Waiting for analysis</small>
+                        </div>
+                    </div>
+
+                    <div class="timeline-item">
+                        <span class="timeline-dot">4</span>
+                        <div>
+                            <strong>Mitigation Approval</strong>
+                            <small>Human approval required</small>
+                        </div>
+                    </div>
+
+                    <div class="timeline-item">
+                        <span class="timeline-dot">5</span>
+                        <div>
+                            <strong>Resolved</strong>
+                            <small>Pending</small>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- Evidence -->
+        <section class="panel evidence-panel">
+
+            <div class="panel-header">
+                <div>
+                    <span class="eyebrow">EVIDENCE</span>
+                    <h3>Evidence Collected</h3>
+                </div>
+            </div>
+
+            <div class="evidence-grid">
+
+                <div class="evidence-card">
+                    <div class="evidence-icon">⌁</div>
+                    <div>
+                        <strong>Metrics</strong>
+                        <small id="metricsEvidence">Retrieved from BigQuery</small>
+                    </div>
+                    <span class="check">✓</span>
+                </div>
+
+                <div class="evidence-card">
+                    <div class="evidence-icon">▤</div>
+                    <div>
+                        <strong>Application Logs</strong>
+                        <small id="logsEvidence">Retrieved from BigQuery</small>
+                    </div>
+                    <span class="check">✓</span>
+                </div>
+
+                <div class="evidence-card">
+                    <div class="evidence-icon">↗</div>
+                    <div>
+                        <strong>Deployments</strong>
+                        <small id="deploymentEvidence">Retrieved from BigQuery</small>
+                    </div>
+                    <span class="check">✓</span>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- Analysis -->
+        <section class="analysis-grid">
+
+            <div class="panel">
+                <span class="eyebrow">METRICS</span>
+                <h3>Metrics Analysis</h3>
+
+                <div id="metricsAnalysis" class="analysis-content">
+                    Waiting for RCA...
+                </div>
+            </div>
+
+            <div class="panel">
+                <span class="eyebrow">LOGS</span>
+                <h3>Log Analysis</h3>
+
+                <div id="logsAnalysis" class="analysis-content">
+                    Waiting for RCA...
+                </div>
+            </div>
+
+            <div class="panel">
+                <span class="eyebrow">DEPLOYMENTS</span>
+                <h3>Deployment Analysis</h3>
+
+                <div id="deploymentAnalysis" class="analysis-content">
+                    Waiting for RCA...
+                </div>
+            </div>
+
+        </section>
+
+
+        <!-- Actions -->
+        <section class="action-bar">
+
+            <button id="approveBtn" class="approve-btn">
+                ✓ Approve Mitigation
+            </button>
+
+            <button id="rejectBtn" class="reject-btn">
+                ✕ Reject
+            </button>
+
+            <button class="secondary-btn">
+                ＋ Create Runbook
+            </button>
+
+        </section>
+
+    </main>
+
+</div>
+
+<script src="/web/app.js"></script>
+
+</body>
+</html>
