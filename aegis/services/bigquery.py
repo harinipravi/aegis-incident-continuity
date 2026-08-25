@@ -87,6 +87,35 @@ class BigQueryEvidenceService:
     # Individual evidence extraction methods
     # ------------------------------------------------------------------
 
+    async def list_incidents(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Retrieve recent incidents from the incidents table.
+        """
+        sql = f"""
+            SELECT
+                incident_id,
+                timestamp,
+                severity,
+                service_name,
+                symptoms,
+                resolution,
+                duration_minutes
+            FROM {self._fqn('incidents')}
+            ORDER BY timestamp DESC
+            LIMIT @result_limit
+        """
+
+        params = [
+            bigquery.ScalarQueryParameter("result_limit", "INT64", limit),
+        ]
+
+        return _run_query(
+            self.client,
+            sql,
+            params,
+            description="list_incidents",
+        )
+
     async def extract_incident(self, incident_id: str) -> Dict[str, Any]:
         """
         Retrieve the target incident record from the incidents table.

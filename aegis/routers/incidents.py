@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from aegis.models.schemas import RCAResponse
 from aegis.services.rca import RCACoordinatorService
+from aegis.services.bigquery import BigQueryEvidenceService
 from aegis.database import record_decision, get_latest_decision
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -14,6 +15,39 @@ router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
 class MitigationDecision(BaseModel):
     decision: str
+
+
+@router.get("")
+async def list_incidents(
+    limit: int = 50,
+    bq_service: BigQueryEvidenceService = Depends()
+):
+    if limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Limit must be between 1 and 100"
+        )
+
+    try:
+        return await bq_service.list_incidents(limit)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{incident_id}")
+async def get_incident(
+    incident_id: str,
+    bq_service: BigQueryEvidenceService = Depends()
+):
+    try:
+        return await bq_service.extract_incident(incident_id)
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/{incident_id}/rca", response_model=RCAResponse)
