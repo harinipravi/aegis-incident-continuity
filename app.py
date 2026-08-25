@@ -5,7 +5,9 @@ from fastapi.responses import FileResponse
 from aegis.config import settings
 from aegis.routers.health import router as health_router
 from aegis.routers.incidents import router as incidents_router
+from aegis.database import init_db
 
+init_db()
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Aegis Automated Incident Continuity & Root Cause Analysis Backend API",

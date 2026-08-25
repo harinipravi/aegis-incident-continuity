@@ -224,49 +224,167 @@ async function generateRca() {
     }
 }
 
-function approveMitigation() {
-    const status = $("incidentStatus");
+async function saveMitigationDecision(decision) {
+    const response = await fetch(
+        `/incidents/${encodeURIComponent(INCIDENT_ID)}/mitigation`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ decision })
+        }
+    );
 
-    if (status) {
-        status.textContent = "MITIGATION APPROVED";
-        status.className = "badge investigating";
+    if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+
+        try {
+            const errorBody = await response.json();
+            if (errorBody.detail) {
+                detail = errorBody.detail;
+            }
+        } catch (_) {
+            // Ignore JSON parsing errors.
+        }
+
+        throw new Error(detail);
     }
 
-    approveButton.textContent = "✓ Approved";
+    return await response.json();
+}
+
+
+async function approveMitigation() {
     approveButton.disabled = true;
+    approveButton.textContent = "⟳ Saving...";
 
-    if (rejectButton) {
-        rejectButton.disabled = true;
+    try {
+        const result = await saveMitigationDecision("APPROVED");
+
+        const status = $("incidentStatus");
+
+        if (status) {
+            status.textContent = "MITIGATION APPROVED";
+            status.className = "badge investigating";
+        }
+
+        approveButton.textContent = "✓ Approved";
+
+        if (rejectButton) {
+            rejectButton.disabled = true;
+        }
+
+        alert(
+            "Mitigation approval recorded for " +
+            result.incident_id +
+            ".\n\nExecution remains human-controlled."
+        );
+
+    } catch (error) {
+        console.error("Mitigation approval failed:", error);
+
+        approveButton.disabled = false;
+        approveButton.textContent = "✓ Approve Mitigation";
+
+        alert(
+            "Unable to record mitigation approval.\n\n" +
+            error.message
+        );
     }
-
-    alert(
-        "Mitigation approval recorded for " +
-        INCIDENT_ID +
-        ".\n\nExecution remains human-controlled."
-    );
 }
 
-function rejectMitigation() {
-    const status = $("incidentStatus");
 
-    if (status) {
-        status.textContent = "MITIGATION REJECTED";
-        status.className = "badge investigating";
-    }
-
-    rejectButton.textContent = "✕ Rejected";
+async function rejectMitigation() {
     rejectButton.disabled = true;
+    rejectButton.textContent = "⟳ Saving...";
 
-    if (approveButton) {
-        approveButton.disabled = true;
+    try {
+        const result = await saveMitigationDecision("REJECTED");
+
+        const status = $("incidentStatus");
+
+        if (status) {
+            status.textContent = "MITIGATION REJECTED";
+            status.className = "badge investigating";
+        }
+
+        rejectButton.textContent = "✕ Rejected";
+
+        if (approveButton) {
+            approveButton.disabled = true;
+        }
+
+        alert(
+            "Mitigation rejection recorded for " +
+            result.incident_id +
+            ".\n\nNo automated action was executed."
+        );
+
+    } catch (error) {
+        console.error("Mitigation rejection failed:", error);
+
+        rejectButton.disabled = false;
+        rejectButton.textContent = "✕ Reject";
+
+        alert(
+            "Unable to record mitigation rejection.\n\n" +
+            error.message
+        );
     }
-
-    alert(
-        "Mitigation rejected for " +
-        INCIDENT_ID +
-        ".\n\nNo automated action was executed."
-    );
 }
+
+
+async function loadMitigationDecision() {
+    try {
+        const response = await fetch(
+            `/incidents/${encodeURIComponent(INCIDENT_ID)}/mitigation`
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.decision === "APPROVED") {
+            const status = $("incidentStatus");
+
+            if (status) {
+                status.textContent = "MITIGATION APPROVED";
+                status.className = "badge investigating";
+            }
+
+            approveButton.textContent = "✓ Approved";
+            approveButton.disabled = true;
+
+            if (rejectButton) {
+                rejectButton.disabled = true;
+            }
+        }
+
+        if (result.decision === "REJECTED") {
+            const status = $("incidentStatus");
+
+            if (status) {
+                status.textContent = "MITIGATION REJECTED";
+                status.className = "badge investigating";
+            }
+
+            rejectButton.textContent = "✕ Rejected";
+            rejectButton.disabled = true;
+
+            if (approveButton) {
+                approveButton.disabled = true;
+            }
+        }
+
+    } catch (error) {
+        console.error("Failed to load mitigation decision:", error);
+    }
+}
+
+loadMitigationDecision();
 
 generateButton.addEventListener("click", generateRca);
 approveButton.addEventListener("click", approveMitigation);
