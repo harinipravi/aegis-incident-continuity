@@ -2,13 +2,22 @@
 Incidents and RCA endpoints.
 """
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from aegis.models.schemas import RCAResponse
 from aegis.services.rca import RCACoordinatorService
 from aegis.services.bigquery import BigQueryEvidenceService
-from aegis.database import record_decision, get_latest_decision
+from aegis.database import (
+    record_decision,
+    get_latest_decision,
+    save_rca_result,
+    list_rca_results,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -35,6 +44,19 @@ async def list_incidents(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# NOTE: This route MUST be declared before /{incident_id} so that FastAPI
+# does not treat the literal string "rca-history" as an incident ID.
+@router.get("/rca-history")
+async def list_rca_history(limit: int = 20):
+    """Return the most recent RCA results stored in the local SQLite database."""
+    if limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Limit must be between 1 and 100"
+        )
+    return list_rca_results(limit)
+
+
 @router.get("/{incident_id}")
 async def get_incident(
     incident_id: str,
@@ -57,6 +79,15 @@ async def trigger_rca(
 ):
     try:
         result = await rca_service.conduct_rca(incident_id=incident_id)
+
+        # Persist RCA result for history; non-fatal if persistence fails.
+        try:
+            save_rca_result(incident_id, result)
+        except Exception as persist_err:
+            logger.warning(
+                "Failed to persist RCA result for %s: %s", incident_id, persist_err
+            )
+
         return result
 
     except ValueError as e:

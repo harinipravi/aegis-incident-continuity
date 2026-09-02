@@ -84,10 +84,6 @@ function updateMetricValues(data) {
 }
 
 function renderRca(data) {
-    // Clear any previous error styling.
-    const rootCauseEl = $("rootCause");
-    if (rootCauseEl) rootCauseEl.classList.remove("rca-error");
-
     setText("serviceName", data.service_name);
     setText("rootCause", data.suspected_root_cause);
     setText("evidenceSummary", data.evidence_summary);
@@ -210,15 +206,13 @@ async function generateRca() {
 
         setText("rcaStatus", "Failed");
 
-        $("rootCause").classList.add("rca-error");
         $("rootCause").textContent =
-            `RCA generation failed: ${error.message}`;
+            `Unable to generate RCA: ${error.message}`;
 
         $("evidenceSummary").textContent =
-            "The backend did not return a valid RCA response. " +
-            "You may retry once the model is available.";
+            "The backend did not return a valid RCA response.";
 
-        $("mitigation").textContent = "No mitigation recommendation available.";
+        $("mitigation").textContent = "No mitigation available.";
 
     } finally {
         $("rootCause").classList.remove("loading");
@@ -342,17 +336,6 @@ async function rejectMitigation() {
 
 
 async function loadMitigationDecision(incidentId = INCIDENT_ID) {
-    // Reset mitigation controls for the newly selected incident.
-    if (approveButton) {
-        approveButton.disabled = false;
-        approveButton.textContent = "✓ Approve Mitigation";
-    }
-
-    if (rejectButton) {
-        rejectButton.disabled = false;
-        rejectButton.textContent = "✕ Reject";
-    }
-
     try {
         const response = await fetch(
             `/incidents/${encodeURIComponent(incidentId)}/mitigation`
@@ -626,184 +609,42 @@ async function selectIncident(incidentId) {
 }
 
 function showIncidentsView() {
-    hideAllViews();
-    if (incidentsView) incidentsView.hidden = false;
+    if (incidentsView) {
+        incidentsView.hidden = false;
+    }
+
+    const main = document.querySelector(".main");
+
+    if (main) {
+        main.hidden = true;
+    }
+
     loadIncidents();
 }
 
 function showOverviewView() {
-    hideAllViews();
+    if (incidentsView) {
+        incidentsView.hidden = true;
+    }
+
     const main = document.querySelector(".main");
-    if (main) main.hidden = false;
-}
 
-// ================= ALL VIEWS HELPER =================
-
-const rcaHistoryView = $("rcaHistoryView");
-const placeholderView = $("placeholderView");
-
-function hideAllViews() {
-    const main = document.querySelector(".main");
-    if (incidentsView)  incidentsView.hidden  = true;
-    if (rcaHistoryView) rcaHistoryView.hidden = true;
-    if (placeholderView) placeholderView.hidden = true;
-    if (main) main.hidden = true;
-}
-
-// ================= RCA HISTORY VIEW =================
-
-const rcaHistoryBody   = $("rcaHistoryBody");
-const rcaHistoryStatus = $("rcaHistoryStatus");
-const refreshHistoryBtn = $("refreshHistoryBtn");
-
-async function loadRcaHistory() {
-    if (!rcaHistoryBody) return;
-
-    rcaHistoryBody.innerHTML = `<tr><td colspan="5" class="history-empty">Loading…</td></tr>`;
-    if (rcaHistoryStatus) rcaHistoryStatus.textContent = "Fetching RCA history...";
-
-    try {
-        const response = await fetch("/incidents/rca-history?limit=20");
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const rows = await response.json();
-
-        if (!Array.isArray(rows) || rows.length === 0) {
-            rcaHistoryBody.innerHTML =
-                `<tr><td colspan="5" class="history-empty">` +
-                `No RCA results yet. Generate an RCA to populate history.</td></tr>`;
-            if (rcaHistoryStatus) rcaHistoryStatus.textContent = "No history found.";
-            return;
-        }
-
-        if (rcaHistoryStatus) {
-            rcaHistoryStatus.textContent =
-                `${rows.length} result${rows.length === 1 ? "" : "s"} found`;
-        }
-
-        rcaHistoryBody.innerHTML = rows.map(row => `
-            <tr>
-                <td class="col-id">${escapeHtml(row.incident_id || "—")}</td>
-                <td>${escapeHtml(row.service_name || "—")}</td>
-                <td class="col-score">
-                    ${typeof row.confidence_score === "number"
-                        ? Math.round(row.confidence_score * 100) + "%"
-                        : "—"}
-                </td>
-                <td class="col-cause">${escapeHtml(
-                    (row.suspected_root_cause || "—").slice(0, 160) +
-                    (row.suspected_root_cause && row.suspected_root_cause.length > 160 ? "…" : "")
-                )}</td>
-                <td class="col-date">${formatIncidentDate(row.generated_at)}</td>
-            </tr>
-        `).join("");
-
-    } catch (error) {
-        console.error("Failed to load RCA history:", error);
-        rcaHistoryBody.innerHTML =
-            `<tr><td colspan="5" class="history-empty">` +
-            `Unable to load history: ${escapeHtml(error.message)}</td></tr>`;
-        if (rcaHistoryStatus) rcaHistoryStatus.textContent = "Error loading history.";
+    if (main) {
+        main.hidden = false;
     }
 }
 
-function showRcaHistoryView() {
-    hideAllViews();
-    if (rcaHistoryView) rcaHistoryView.hidden = false;
-    loadRcaHistory();
-}
-
-if (refreshHistoryBtn) {
-    refreshHistoryBtn.addEventListener("click", loadRcaHistory);
-}
-
-// ================= PLACEHOLDER VIEW =================
-
-const PLACEHOLDER_CONFIG = {
-    Services: {
-        eyebrow: "INFRASTRUCTURE",
-        title: "Services",
-        subtitle: "Service dependency map and health overview.",
-        icon: "◈",
-        heading: "Service Map",
-        description:
-            "An interactive service dependency graph is planned for a future release. " +
-            "Service health is currently surfaced through the RCA evidence packets.",
-    },
-    Alerts: {
-        eyebrow: "MONITORING",
-        title: "Alerts",
-        subtitle: "Active alert rules and notification routing.",
-        icon: "⚠",
-        heading: "Alert Management",
-        description:
-            "Real-time alerting integration is planned for a future release. " +
-            "Incidents are currently ingested via the BigQuery incidents table.",
-    },
-    Runbooks: {
-        eyebrow: "OPERATIONS",
-        title: "Runbooks",
-        subtitle: "Standard operating procedures and automated playbooks.",
-        icon: "▣",
-        heading: "Runbook Library",
-        description:
-            "Runbook creation and playbook automation is planned for a future release. " +
-            "Mitigation steps are currently recommended by the Gemini RCA engine.",
-    },
-    Reports: {
-        eyebrow: "REPORTING",
-        title: "Reports",
-        subtitle: "Incident trends, MTTR analysis, and SLA reporting.",
-        icon: "▤",
-        heading: "Report Center",
-        description:
-            "Automated reporting and trend analysis is planned for a future release. " +
-            "RCA history is available in the RCA History view.",
-    },
-};
-
-function showPlaceholderView(key) {
-    const cfg = PLACEHOLDER_CONFIG[key];
-    if (!cfg || !placeholderView) return;
-
-    hideAllViews();
-    placeholderView.hidden = false;
-
-    const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
-    set("placeholderEyebrow",     cfg.eyebrow);
-    set("placeholderTitle",       cfg.title);
-    set("placeholderSubtitle",    cfg.subtitle);
-    set("placeholderIcon",        cfg.icon);
-    set("placeholderHeading",     cfg.heading);
-    set("placeholderDescription", cfg.description);
-}
-
-// ================= NAV WIRING =================
-
-navItems.forEach((item) => {
+navItems.forEach((item, index) => {
     item.addEventListener("click", () => {
         navItems.forEach(nav => nav.classList.remove("active"));
         item.classList.add("active");
 
         const label = item.textContent.trim();
 
-        if (label.includes("Overview")) {
-            showOverviewView();
-        } else if (label.includes("Incidents")) {
+        if (label.includes("Incidents")) {
             showIncidentsView();
-        } else if (label.includes("RCA History")) {
-            showRcaHistoryView();
-        } else if (label.includes("Services")) {
-            showPlaceholderView("Services");
-        } else if (label.includes("Alerts")) {
-            showPlaceholderView("Alerts");
-        } else if (label.includes("Runbooks")) {
-            showPlaceholderView("Runbooks");
-        } else if (label.includes("Reports")) {
-            showPlaceholderView("Reports");
+        } else if (label.includes("Overview")) {
+            showOverviewView();
         }
     });
 });
