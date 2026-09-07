@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     
     # Gemini config
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-pro"
+    GEMINI_MODEL: str = "gemini-3.6-flash"
     
     # Database config
     DATABASE_URL: str = "sqlite:///./aegis.db"

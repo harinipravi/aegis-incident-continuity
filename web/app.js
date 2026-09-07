@@ -6,6 +6,129 @@ const generateButton = $("generateRcaBtn");
 const approveButton = $("approveBtn");
 const rejectButton = $("rejectBtn");
 
+/* ==========================================================================
+   THEME ENGINE (Dark, Light, System Default)
+   ========================================================================== */
+
+const themeSelect = $("themeSelect");
+
+function getSystemTheme() {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function setTheme(mode) {
+    if (!mode) mode = "system";
+    
+    // Store user preference
+    localStorage.setItem("aegis-theme", mode);
+    
+    // Set html attribute
+    document.documentElement.setAttribute("data-theme", mode);
+    
+    if (themeSelect && themeSelect.value !== mode) {
+        themeSelect.value = mode;
+    }
+}
+
+function initTheme() {
+    const savedTheme = localStorage.getItem("aegis-theme") || "system";
+    setTheme(savedTheme);
+
+    if (themeSelect) {
+        themeSelect.addEventListener("change", (e) => {
+            setTheme(e.target.value);
+            showToast(`Appearance changed to ${e.target.options[e.target.selectedIndex].text}`, "info");
+        });
+    }
+
+    // System theme change listener
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+        const currentMode = localStorage.getItem("aegis-theme");
+        if (currentMode === "system" || !currentMode) {
+            setTheme("system");
+        }
+    });
+}
+
+
+/* ==========================================================================
+   TOAST NOTIFICATION SYSTEM
+   ========================================================================== */
+
+function showToast(message, type = "info", duration = 4000) {
+    const container = $("toastContainer");
+    if (!container) return;
+
+    const toast = document.createElement("div");
+    toast.className = `toast toast-${type}`;
+
+    let icon = "ℹ";
+    if (type === "success") icon = "✓";
+    if (type === "error") icon = "✕";
+
+    toast.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <div class="toast-content">${escapeHtml(message)}</div>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(10px)";
+        setTimeout(() => toast.remove(), 200);
+    }, duration);
+}
+
+
+/* ==========================================================================
+   MODAL CONTROLS
+   ========================================================================== */
+
+function openModal(modalId) {
+    const modal = typeof modalId === "string" ? $(modalId) : modalId;
+    if (modal) {
+        modal.hidden = false;
+        modal.style.display = "grid";
+    }
+}
+
+function closeModal(modalId) {
+    const modal = typeof modalId === "string" ? $(modalId) : modalId;
+    if (modal) {
+        modal.hidden = true;
+        modal.style.display = "none";
+    }
+}
+
+document.addEventListener("click", (e) => {
+    const closeBtn = e.target.closest("[data-modal-close]");
+    if (closeBtn) {
+        const modal = closeBtn.closest(".modal-overlay");
+        if (modal) {
+            closeModal(modal);
+        }
+        return;
+    }
+
+    if (e.target.classList.contains("modal-overlay")) {
+        closeModal(e.target);
+    }
+});
+
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" || e.key === "Esc") {
+        document.querySelectorAll(".modal-overlay").forEach((modal) => {
+            closeModal(modal);
+        });
+    }
+});
+
+
+/* ==========================================================================
+   HELPERS & RENDERING
+   ========================================================================== */
+
 function setText(id, value) {
     const element = $(id);
     if (element) {
@@ -83,6 +206,38 @@ function updateMetricValues(data) {
     }
 }
 
+function updateStepperBar(rcaCompleted, mitigationDecision) {
+    const rcaStep = $("stepperRca");
+    const mitStep = $("stepperMitigation");
+    const resStep = $("stepperResolved");
+
+    if (rcaStep) {
+        if (rcaCompleted) {
+            rcaStep.className = "stepper-step complete";
+        } else {
+            rcaStep.className = "stepper-step active";
+        }
+    }
+
+    if (mitStep) {
+        if (mitigationDecision === "APPROVED") {
+            mitStep.className = "stepper-step complete";
+        } else if (rcaCompleted) {
+            mitStep.className = "stepper-step active";
+        } else {
+            mitStep.className = "stepper-step";
+        }
+    }
+
+    if (resStep) {
+        if (mitigationDecision === "APPROVED") {
+            resStep.className = "stepper-step active";
+        } else {
+            resStep.className = "stepper-step";
+        }
+    }
+}
+
 function renderRca(data) {
     // Clear any previous error styling.
     const rootCauseEl = $("rootCause");
@@ -142,22 +297,20 @@ function renderRca(data) {
         timeline.classList.add("complete");
 
         const dot = timeline.querySelector(".timeline-dot");
-
-        if (dot) {
-            dot.textContent = "✓";
-        }
+        if (dot) dot.textContent = "✓";
 
         const small = timeline.querySelector("small");
-
-        if (small) {
-            small.textContent = "Gemini RCA completed";
-        }
+        if (small) small.textContent = "Gemini RCA completed";
     }
+
+    updateStepperBar(true, null);
 
     // Evidence labels
     setText("metricsEvidence", "Metrics analyzed successfully");
     setText("logsEvidence", "Application logs analyzed successfully");
     setText("deploymentEvidence", "Deployment changes analyzed successfully");
+
+    showToast(`RCA successfully generated for ${INCIDENT_ID}`, "success");
 }
 
 async function generateRca() {
@@ -202,7 +355,6 @@ async function generateRca() {
         }
 
         const data = await response.json();
-
         renderRca(data);
 
     } catch (error) {
@@ -220,13 +372,50 @@ async function generateRca() {
 
         $("mitigation").textContent = "No mitigation recommendation available.";
 
+        showToast(`RCA generation failed: ${error.message}`, "error");
+
     } finally {
         $("rootCause").classList.remove("loading");
         $("evidenceSummary").classList.remove("loading");
         $("mitigation").classList.remove("loading");
 
         generateButton.disabled = false;
-        generateButton.textContent = "✦ Generate RCA";
+        generateButton.textContent = "⚡ Generate RCA";
+    }
+}
+
+
+/* ==========================================================================
+   MITIGATION APPROVAL & REJECTION WORKFLOW
+   ========================================================================== */
+
+function updateMitigationTimeline(decision) {
+    const timeline = $("mitigationTimeline");
+    if (!timeline) return;
+
+    const dot = timeline.querySelector(".timeline-dot");
+    const small = timeline.querySelector("small");
+
+    if (decision === "APPROVED") {
+        timeline.classList.remove("active");
+        timeline.classList.add("complete");
+
+        if (dot) dot.textContent = "✓";
+        if (small) small.textContent = "Mitigation approved";
+        
+        updateStepperBar(true, "APPROVED");
+    } else if (decision === "REJECTED") {
+        timeline.classList.remove("complete", "active");
+
+        if (dot) dot.textContent = "4";
+        if (small) small.textContent = "Mitigation rejected";
+        
+        updateStepperBar(true, "REJECTED");
+    } else {
+        timeline.classList.remove("complete", "active");
+
+        if (dot) dot.textContent = "4";
+        if (small) small.textContent = "Human approval required";
     }
 }
 
@@ -260,8 +449,22 @@ async function saveMitigationDecision(decision) {
     return await response.json();
 }
 
+function promptApproveMitigation() {
+    setText("modalApproveIncidentId", INCIDENT_ID);
+    const text = $("mitigation") ? $("mitigation").textContent : "—";
+    setText("modalApproveMitigationText", text);
+    openModal("approveModal");
+}
 
-async function approveMitigation() {
+function promptRejectMitigation() {
+    setText("modalRejectIncidentId", INCIDENT_ID);
+    const text = $("mitigation") ? $("mitigation").textContent : "—";
+    setText("modalRejectMitigationText", text);
+    openModal("rejectModal");
+}
+
+async function executeApproveMitigation() {
+    closeModal("approveModal");
     approveButton.disabled = true;
     approveButton.textContent = "⟳ Saving...";
 
@@ -269,7 +472,6 @@ async function approveMitigation() {
         const result = await saveMitigationDecision("APPROVED");
 
         const status = $("incidentStatus");
-
         if (status) {
             status.textContent = "MITIGATION APPROVED";
             status.className = "badge investigating";
@@ -281,27 +483,20 @@ async function approveMitigation() {
             rejectButton.disabled = true;
         }
 
-        alert(
-            "Mitigation approval recorded for " +
-            result.incident_id +
-            ".\n\nExecution remains human-controlled."
-        );
+        updateMitigationTimeline("APPROVED");
+        showToast(`Mitigation approval recorded for ${result.incident_id}`, "success");
 
     } catch (error) {
         console.error("Mitigation approval failed:", error);
 
         approveButton.disabled = false;
         approveButton.textContent = "✓ Approve Mitigation";
-
-        alert(
-            "Unable to record mitigation approval.\n\n" +
-            error.message
-        );
+        showToast(`Unable to record mitigation approval: ${error.message}`, "error");
     }
 }
 
-
-async function rejectMitigation() {
+async function executeRejectMitigation() {
+    closeModal("rejectModal");
     rejectButton.disabled = true;
     rejectButton.textContent = "⟳ Saving...";
 
@@ -309,7 +504,6 @@ async function rejectMitigation() {
         const result = await saveMitigationDecision("REJECTED");
 
         const status = $("incidentStatus");
-
         if (status) {
             status.textContent = "MITIGATION REJECTED";
             status.className = "badge investigating";
@@ -321,25 +515,17 @@ async function rejectMitigation() {
             approveButton.disabled = true;
         }
 
-        alert(
-            "Mitigation rejection recorded for " +
-            result.incident_id +
-            ".\n\nNo automated action was executed."
-        );
+        updateMitigationTimeline("REJECTED");
+        showToast(`Mitigation rejection recorded for ${result.incident_id}`, "info");
 
     } catch (error) {
         console.error("Mitigation rejection failed:", error);
 
         rejectButton.disabled = false;
         rejectButton.textContent = "✕ Reject";
-
-        alert(
-            "Unable to record mitigation rejection.\n\n" +
-            error.message
-        );
+        showToast(`Unable to record mitigation rejection: ${error.message}`, "error");
     }
 }
-
 
 async function loadMitigationDecision(incidentId = INCIDENT_ID) {
     // Reset mitigation controls for the newly selected incident.
@@ -352,6 +538,8 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
         rejectButton.disabled = false;
         rejectButton.textContent = "✕ Reject";
     }
+
+    updateMitigationTimeline(null);
 
     try {
         const response = await fetch(
@@ -366,7 +554,6 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
 
         if (result.decision === "APPROVED") {
             const status = $("incidentStatus");
-
             if (status) {
                 status.textContent = "MITIGATION APPROVED";
                 status.className = "badge investigating";
@@ -378,11 +565,12 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
             if (rejectButton) {
                 rejectButton.disabled = true;
             }
+
+            updateMitigationTimeline("APPROVED");
         }
 
         if (result.decision === "REJECTED") {
             const status = $("incidentStatus");
-
             if (status) {
                 status.textContent = "MITIGATION REJECTED";
                 status.className = "badge investigating";
@@ -394,6 +582,8 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
             if (approveButton) {
                 approveButton.disabled = true;
             }
+
+            updateMitigationTimeline("REJECTED");
         }
 
     } catch (error) {
@@ -402,9 +592,19 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
 }
 
 
+/* ==========================================================================
+   EVENT LISTENERS & NAVIGATION
+   ========================================================================== */
+
 generateButton.addEventListener("click", generateRca);
-approveButton.addEventListener("click", approveMitigation);
-rejectButton.addEventListener("click", rejectMitigation);
+approveButton.addEventListener("click", promptApproveMitigation);
+rejectButton.addEventListener("click", promptRejectMitigation);
+
+const confirmApproveBtn = $("confirmApproveBtn");
+if (confirmApproveBtn) confirmApproveBtn.addEventListener("click", executeApproveMitigation);
+
+const confirmRejectBtn = $("confirmRejectBtn");
+if (confirmRejectBtn) confirmRejectBtn.addEventListener("click", executeRejectMitigation);
 
 
 // ================= INCIDENTS VIEW =================
@@ -586,6 +786,7 @@ async function selectIncident(incidentId) {
         setText("deploymentAnalysis", "Waiting for RCA...");
 
         setText("rcaStatus", "Waiting");
+        
         // Reset mitigation controls for the newly selected incident.
         if (approveButton) {
             approveButton.disabled = false;
@@ -596,6 +797,7 @@ async function selectIncident(incidentId) {
             rejectButton.disabled = false;
             rejectButton.textContent = "✕ Reject";
         }
+        
         // Reset RCA timeline.
         const timeline = $("rcaTimeline");
 
@@ -604,24 +806,20 @@ async function selectIncident(incidentId) {
             timeline.classList.add("active");
 
             const dot = timeline.querySelector(".timeline-dot");
-
-            if (dot) {
-                dot.textContent = "3";
-            }
+            if (dot) dot.textContent = "3";
 
             const small = timeline.querySelector("small");
-
-            if (small) {
-                small.textContent = "Waiting for analysis";
-            }
+            if (small) small.textContent = "Waiting for analysis";
         }
+
+        updateStepperBar(false, null);
 
         // Load the mitigation decision for the selected incident.
         loadMitigationDecision(incidentId);
 
     } catch (error) {
         console.error("Failed to load selected incident:", error);
-        alert(`Unable to load ${incidentId}: ${error.message}`);
+        showToast(`Unable to load ${incidentId}: ${error.message}`, "error");
     }
 }
 
@@ -725,43 +923,43 @@ if (refreshHistoryBtn) {
 const PLACEHOLDER_CONFIG = {
     Services: {
         eyebrow: "INFRASTRUCTURE",
-        title: "Services",
-        subtitle: "Service dependency map and health overview.",
+        title: "Services Map",
+        subtitle: "Service dependency topology and operational health overview.",
         icon: "◈",
-        heading: "Service Map",
+        heading: "Service Map & Dependency Graph",
         description:
-            "An interactive service dependency graph is planned for a future release. " +
-            "Service health is currently surfaced through the RCA evidence packets.",
+            "An interactive service topology map is planned for a future release. " +
+            "Service health signals are currently aggregated through the BigQuery RCA evidence engine.",
     },
     Alerts: {
         eyebrow: "MONITORING",
-        title: "Alerts",
-        subtitle: "Active alert rules and notification routing.",
+        title: "Alert Rules",
+        subtitle: "Active incident alert thresholds and automated page routing.",
         icon: "⚠",
-        heading: "Alert Management",
+        heading: "Alert Management Center",
         description:
-            "Real-time alerting integration is planned for a future release. " +
-            "Incidents are currently ingested via the BigQuery incidents table.",
+            "Real-time alert threshold configuration is planned for a future release. " +
+            "Incidents are currently ingested via the BigQuery incident table pipeline.",
     },
     Runbooks: {
         eyebrow: "OPERATIONS",
-        title: "Runbooks",
-        subtitle: "Standard operating procedures and automated playbooks.",
+        title: "Runbooks Library",
+        subtitle: "Standard operating procedures and automated mitigation playbooks.",
         icon: "▣",
-        heading: "Runbook Library",
+        heading: "Automated Runbook Engine",
         description:
-            "Runbook creation and playbook automation is planned for a future release. " +
-            "Mitigation steps are currently recommended by the Gemini RCA engine.",
+            "Runbook automation and executable playbooks are planned for a future release. " +
+            "Mitigation actions are currently synthesized dynamically by the Gemini RCA engine.",
     },
     Reports: {
         eyebrow: "REPORTING",
-        title: "Reports",
-        subtitle: "Incident trends, MTTR analysis, and SLA reporting.",
+        title: "Incident Reports",
+        subtitle: "MTTR analytics, availability SLA tracking, and incident trend analysis.",
         icon: "▤",
-        heading: "Report Center",
+        heading: "Analytics & SLA Reports",
         description:
-            "Automated reporting and trend analysis is planned for a future release. " +
-            "RCA history is available in the RCA History view.",
+            "Automated reporting and SLA trend analysis is planned for a future release. " +
+            "Historical RCA audit records are available in the RCA History view.",
     },
 };
 
@@ -830,4 +1028,6 @@ window.addEventListener("hashchange", () => {
     }
 });
 
+// Initialize Theme & Incident State on Load
+initTheme();
 initializeIncidentFromUrl();
