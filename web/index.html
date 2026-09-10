@@ -119,13 +119,13 @@
             </div>
         </div>
 
-        <div class="placeholder-card">
+        <div id="placeholderCard" class="placeholder-card">
             <div class="placeholder-icon" id="placeholderIcon">◌</div>
             <h3 id="placeholderHeading">Coming Soon</h3>
             <p id="placeholderDescription">
                 This feature is planned for a future release.
             </p>
-            <span class="coming-soon-badge">Coming Soon</span>
+            <span id="comingSoonBadge" class="coming-soon-badge">Coming Soon</span>
         </div>
     </section>
 
@@ -423,8 +423,12 @@
                 ✕ Reject
             </button>
 
-            <button class="secondary-btn">
+            <button id="createRunbookBtn" class="secondary-btn">
                 ＋ Create Runbook
+            </button>
+
+            <button id="resolveBtn" class="secondary-btn" disabled>
+                ✓ Resolve Incident
             </button>
 
         </section>

@@ -3,6 +3,7 @@ Incidents and RCA endpoints.
 """
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -15,6 +16,10 @@ from aegis.database import (
     get_latest_decision,
     save_rca_result,
     list_rca_results,
+    set_incident_status,
+    get_incident_status,
+    save_runbook,
+    list_runbooks,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,6 +60,41 @@ async def list_rca_history(limit: int = 20):
             detail="Limit must be between 1 and 100"
         )
     return list_rca_results(limit)
+
+
+@router.get("/{incident_id}/status")
+async def get_status(incident_id: str):
+    return get_incident_status(incident_id)
+
+
+@router.post("/{incident_id}/resolve")
+async def resolve_incident(incident_id: str):
+    decision = get_latest_decision(incident_id)
+
+    if decision is None or decision.get("decision") != "APPROVED":
+        raise HTTPException(
+            status_code=400,
+            detail="Incident can only be resolved after mitigation is approved"
+        )
+
+    resolved_at = datetime.now(timezone.utc).isoformat()
+
+    return set_incident_status(
+        incident_id,
+        "RESOLVED",
+        resolved_at,
+    )
+
+
+@router.get("/runbooks")
+async def get_runbooks(limit: int = 50):
+    if limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Limit must be between 1 and 100"
+        )
+
+    return list_runbooks(limit)
 
 
 @router.get("/{incident_id}")
@@ -111,6 +151,53 @@ async def save_mitigation_decision(
         )
 
     return record_decision(incident_id, decision)
+
+
+@router.post("/{incident_id}/runbook")
+async def create_runbook(incident_id: str):
+    decision = get_latest_decision(incident_id)
+
+    if decision is None or decision.get("decision") != "APPROVED":
+        raise HTTPException(
+            status_code=400,
+            detail="Runbook can only be created after mitigation is approved"
+        )
+
+    from aegis.database import get_connection
+    import json
+
+    conn = get_connection()
+
+    try:
+        row = conn.execute(
+            """
+            SELECT result_json
+            FROM rca_results
+            WHERE incident_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (incident_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Generate an RCA before creating a runbook"
+        )
+
+    result = json.loads(row["result_json"])
+
+    return save_runbook(
+        incident_id=incident_id,
+        service_name=result.get("service_name", ""),
+        title=f"{result.get('service_name', incident_id)} Incident Recovery Runbook",
+        root_cause=result.get("suspected_root_cause", ""),
+        mitigation=result.get("recommended_mitigation", ""),
+        evidence_summary=result.get("evidence_summary", ""),
+    )
 
 
 @router.get("/{incident_id}/mitigation")

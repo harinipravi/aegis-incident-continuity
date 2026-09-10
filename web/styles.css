@@ -1502,3 +1502,141 @@ button:disabled {
         flex-direction: column;
     }
 }
+
+/* =========================================================
+   RUNBOOKS LIBRARY
+   ========================================================= */
+
+.runbooks-placeholder-card {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+    text-align: left;
+    padding: 24px;
+}
+
+.runbooks-placeholder-card .placeholder-icon,
+.runbooks-placeholder-card > h3 {
+    display: none;
+}
+
+.runbooks-placeholder-card #placeholderDescription {
+    width: 100%;
+    margin: 0;
+}
+
+.runbook-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 16px;
+    width: 100%;
+}
+
+.runbook-card {
+    box-sizing: border-box;
+    padding: 18px;
+    border: 1px solid var(--border, #2a3142);
+    background: rgba(255, 255, 255, 0.025);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.runbook-card:hover {
+    border-color: #3b82f6;
+    transform: translateY(-1px);
+}
+
+.runbook-card:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.runbook-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.runbook-card-header h3 {
+    margin: 5px 0 0;
+    font-size: 16px;
+}
+
+.runbook-service,
+.runbook-label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.runbook-service {
+    opacity: 0.65;
+}
+
+.runbook-incident {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    white-space: nowrap;
+    padding: 4px 7px;
+    border: 1px solid var(--border, #2a3142);
+    border-radius: 4px;
+}
+
+.runbook-section {
+    padding: 12px 0;
+    border-top: 1px solid var(--border, #2a3142);
+}
+
+.runbook-section p {
+    margin: 6px 0 0;
+    line-height: 1.5;
+    font-size: 12px;
+    opacity: 0.82;
+}
+
+.runbook-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border, #2a3142);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 9px;
+    opacity: 0.7;
+}
+
+.runbook-status {
+    opacity: 1;
+}
+
+.runbook-empty {
+    padding: 24px;
+    text-align: center;
+}
+
+.runbook-empty strong,
+.runbook-empty span {
+    display: block;
+}
+
+.runbook-empty span {
+    margin-top: 8px;
+    opacity: 0.65;
+}
+
+@media (max-width: 700px) {
+    .runbook-list {
+        grid-template-columns: 1fr;
+    }
+
+    .runbook-card-header,
+    .runbook-footer {
+        flex-direction: column;
+    }
+}
+

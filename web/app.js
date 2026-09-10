@@ -3,6 +3,8 @@ let INCIDENT_ID = "INC-006";
 const $ = (id) => document.getElementById(id);
 
 const generateButton = $("generateRcaBtn");
+const createRunbookButton = $("createRunbookBtn");
+const resolveButton = $("resolveBtn");
 const approveButton = $("approveBtn");
 const rejectButton = $("rejectBtn");
 
@@ -206,6 +208,183 @@ function updateMetricValues(data) {
     }
 }
 
+async function loadIncidentState(incidentId = INCIDENT_ID) {
+    if (!resolveButton) return;
+
+    resolveButton.disabled = true;
+    resolveButton.textContent = "✓ Resolve Incident";
+
+    try {
+        const response = await fetch(
+            `/incidents/${encodeURIComponent(incidentId)}/status`
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const state = await response.json();
+
+        if (state.status === "RESOLVED") {
+            const status = $("incidentStatus");
+
+            if (status) {
+                status.textContent = "RESOLVED";
+                status.className = "badge investigating";
+            }
+
+            resolveButton.disabled = true;
+            resolveButton.textContent = "✓ Resolved";
+
+            updateStepperBar(true, "RESOLVED");
+            updateResolvedTimeline();
+        } else if (state.status === "MITIGATION APPROVED") {
+            const status = $("incidentStatus");
+
+            if (status) {
+                status.textContent = "MITIGATION APPROVED";
+                status.className = "badge investigating";
+            }
+
+            enableResolveAfterApproval();
+            updateStepperBar(true, "APPROVED");
+        }
+    } catch (error) {
+        console.error("Failed to load incident state:", error);
+    }
+}
+
+
+function enableResolveAfterApproval() {
+    if (!resolveButton) return;
+
+    resolveButton.disabled = false;
+    resolveButton.textContent = "✓ Resolve Incident";
+}
+
+
+function updateResolvedTimeline() {
+    const timeline = document.querySelector(
+        ".timeline-item:nth-child(5)"
+    );
+
+    if (!timeline) return;
+
+    timeline.classList.remove("active");
+    timeline.classList.add("complete");
+
+    const dot = timeline.querySelector(".timeline-dot");
+    const small = timeline.querySelector("small");
+
+    if (dot) dot.textContent = "✓";
+    if (small) small.textContent = "Incident resolved";
+}
+
+
+async function createRunbook() {
+    if (!createRunbookButton) return;
+
+    createRunbookButton.disabled = true;
+    createRunbookButton.textContent = "⟳ Creating...";
+
+    try {
+        const response = await fetch(
+            `/incidents/${encodeURIComponent(INCIDENT_ID)}/runbook`,
+            {
+                method: "POST"
+            }
+        );
+
+        if (!response.ok) {
+            let detail = `HTTP ${response.status}`;
+
+            try {
+                const body = await response.json();
+                if (body.detail) detail = body.detail;
+            } catch (_) {}
+
+            throw new Error(detail);
+        }
+
+        const result = await response.json();
+
+        createRunbookButton.textContent = "✓ Runbook Created";
+
+        showToast(
+            `Runbook created for ${result.incident_id}`,
+            "success"
+        );
+    } catch (error) {
+        console.error("Runbook creation failed:", error);
+
+        createRunbookButton.disabled = false;
+        createRunbookButton.textContent = "＋ Create Runbook";
+
+        showToast(
+            `Unable to create runbook: ${error.message}`,
+            "error"
+        );
+    }
+}
+
+
+async function resolveIncident() {
+    if (!resolveButton) return;
+
+    resolveButton.disabled = true;
+    resolveButton.textContent = "⟳ Resolving...";
+
+    try {
+        const response = await fetch(
+            `/incidents/${encodeURIComponent(INCIDENT_ID)}/resolve`,
+            {
+                method: "POST"
+            }
+        );
+
+        if (!response.ok) {
+            let detail = `HTTP ${response.status}`;
+
+            try {
+                const body = await response.json();
+                if (body.detail) detail = body.detail;
+            } catch (_) {}
+
+            throw new Error(detail);
+        }
+
+        const result = await response.json();
+
+        const status = $("incidentStatus");
+
+        if (status) {
+            status.textContent = "RESOLVED";
+            status.className = "badge investigating";
+        }
+
+        resolveButton.textContent = "✓ Resolved";
+
+        updateStepperBar(true, "RESOLVED");
+        updateResolvedTimeline();
+
+        showToast(
+            `Incident ${result.incident_id} resolved`,
+            "success"
+        );
+    } catch (error) {
+        console.error("Incident resolution failed:", error);
+
+        resolveButton.disabled = false;
+        resolveButton.textContent = "✓ Resolve Incident";
+
+        showToast(
+            `Unable to resolve incident: ${error.message}`,
+            "error"
+        );
+    }
+}
+
+
 function updateStepperBar(rcaCompleted, mitigationDecision) {
     const rcaStep = $("stepperRca");
     const mitStep = $("stepperMitigation");
@@ -220,7 +399,10 @@ function updateStepperBar(rcaCompleted, mitigationDecision) {
     }
 
     if (mitStep) {
-        if (mitigationDecision === "APPROVED") {
+        if (
+            mitigationDecision === "APPROVED" ||
+            mitigationDecision === "RESOLVED"
+        ) {
             mitStep.className = "stepper-step complete";
         } else if (rcaCompleted) {
             mitStep.className = "stepper-step active";
@@ -230,7 +412,12 @@ function updateStepperBar(rcaCompleted, mitigationDecision) {
     }
 
     if (resStep) {
-        if (mitigationDecision === "APPROVED") {
+        if (mitigationDecision === "RESOLVED") {
+            resStep.className = "stepper-step complete";
+
+            const dot = resStep.querySelector(".step-badge");
+            if (dot) dot.textContent = "✓";
+        } else if (mitigationDecision === "APPROVED") {
             resStep.className = "stepper-step active";
         } else {
             resStep.className = "stepper-step";
@@ -484,6 +671,7 @@ async function executeApproveMitigation() {
         }
 
         updateMitigationTimeline("APPROVED");
+        enableResolveAfterApproval();
         showToast(`Mitigation approval recorded for ${result.incident_id}`, "success");
 
     } catch (error) {
@@ -541,6 +729,11 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
 
     updateMitigationTimeline(null);
 
+    if (resolveButton) {
+        resolveButton.disabled = true;
+        resolveButton.textContent = "✓ Resolve Incident";
+    }
+
     try {
         const response = await fetch(
             `/incidents/${encodeURIComponent(incidentId)}/mitigation`
@@ -551,6 +744,11 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
         }
 
         const result = await response.json();
+
+        // Ignore stale responses from a previously selected incident.
+        if (INCIDENT_ID !== incidentId) {
+            return;
+        }
 
         if (result.decision === "APPROVED") {
             const status = $("incidentStatus");
@@ -567,6 +765,13 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
             }
 
             updateMitigationTimeline("APPROVED");
+            enableResolveAfterApproval();
+
+            // Runbook is available only after mitigation approval.
+            if (createRunbookButton) {
+                createRunbookButton.disabled = false;
+                createRunbookButton.textContent = "＋ Create Runbook";
+            }
         }
 
         if (result.decision === "REJECTED") {
@@ -589,6 +794,10 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
     } catch (error) {
         console.error("Failed to load mitigation decision:", error);
     }
+
+    if (INCIDENT_ID === incidentId) {
+        await loadIncidentState(incidentId);
+    }
 }
 
 
@@ -597,6 +806,13 @@ async function loadMitigationDecision(incidentId = INCIDENT_ID) {
    ========================================================================== */
 
 generateButton.addEventListener("click", generateRca);
+if (createRunbookButton) {
+    createRunbookButton.addEventListener("click", createRunbook);
+}
+
+if (resolveButton) {
+    resolveButton.addEventListener("click", resolveIncident);
+}
 approveButton.addEventListener("click", promptApproveMitigation);
 rejectButton.addEventListener("click", promptRejectMitigation);
 
@@ -615,6 +831,48 @@ const incidentsStatus = $("incidentsStatus");
 const refreshIncidentsButton = $("refreshIncidentsBtn");
 
 const navItems = document.querySelectorAll(".nav-item");
+
+// ================= SIDEBAR NAVIGATION =================
+
+navItems.forEach(item => {
+    item.addEventListener("click", () => {
+        const label = (
+            item.dataset.view ||
+            item.textContent ||
+            ""
+        ).trim();
+
+        navItems.forEach(nav => {
+            nav.classList.remove("active");
+        });
+
+        item.classList.add("active");
+
+        if (label.toLowerCase().includes("overview")) {
+            showOverviewView();
+
+        } else if (label.toLowerCase().includes("incident")) {
+            showIncidentsView();
+
+        } else if (label.toLowerCase().includes("rca history")) {
+            showRcaHistoryView();
+
+        } else if (label.toLowerCase().includes("runbook")) {
+            showRunbooksView();
+
+        } else if (label.toLowerCase().includes("service")) {
+            showPlaceholderView("Services");
+
+        } else if (label.toLowerCase().includes("alert")) {
+            showPlaceholderView("Alerts");
+
+        } else if (label.toLowerCase().includes("report")) {
+            showPlaceholderView("Reports");
+        }
+    });
+});
+
+
 
 async function loadIncidents() {
     if (!incidentsList || !incidentsStatus) {
@@ -796,6 +1054,12 @@ async function selectIncident(incidentId) {
         if (rejectButton) {
             rejectButton.disabled = false;
             rejectButton.textContent = "✕ Reject";
+        }
+
+        // Reset Runbook button for the newly selected incident.
+        if (createRunbookButton) {
+            createRunbookButton.disabled = true;
+            createRunbookButton.textContent = "＋ Create Runbook";
         }
         
         // Reset RCA timeline.
@@ -979,36 +1243,524 @@ function showPlaceholderView(key) {
     set("placeholderDescription", cfg.description);
 }
 
-// ================= NAV WIRING =================
 
-navItems.forEach((item) => {
-    item.addEventListener("click", () => {
-        navItems.forEach(nav => nav.classList.remove("active"));
-        item.classList.add("active");
 
-        const label = item.textContent.trim();
+function showRunbookDetail(runbook) {
+    if (!placeholderView || !runbook) return;
 
-        if (label.includes("Overview")) {
-            showOverviewView();
-        } else if (label.includes("Incidents")) {
-            showIncidentsView();
-        } else if (label.includes("RCA History")) {
-            showRcaHistoryView();
-        } else if (label.includes("Services")) {
-            showPlaceholderView("Services");
-        } else if (label.includes("Alerts")) {
-            showPlaceholderView("Alerts");
-        } else if (label.includes("Runbooks")) {
-            showPlaceholderView("Runbooks");
-        } else if (label.includes("Reports")) {
-            showPlaceholderView("Reports");
-        }
-    });
-});
+    hideAllViews();
+    placeholderView.hidden = false;
 
-if (refreshIncidentsButton) {
-    refreshIncidentsButton.addEventListener("click", loadIncidents);
+    const eyebrow = $("placeholderEyebrow");
+    const title = $("placeholderTitle");
+    const subtitle = $("placeholderSubtitle");
+    const icon = $("placeholderIcon");
+    const heading = $("placeholderHeading");
+    const description = $("placeholderDescription");
+    const placeholderCard = $("placeholderCard");
+    const comingSoonBadge = $("comingSoonBadge");
+
+    if (eyebrow) {
+        eyebrow.textContent = "OPERATIONS / RUNBOOK";
+    }
+
+    if (title) {
+        title.textContent = runbook.incident_id || "Incident Runbook";
+    }
+
+    if (subtitle) {
+        subtitle.textContent =
+            `${runbook.service_name || "Unknown service"} · ` +
+            "Evidence-backed recovery procedure";
+    }
+
+    if (icon) {
+        icon.textContent = "▣";
+    }
+
+    if (heading) {
+        heading.textContent =
+            runbook.title || "Incident Recovery Runbook";
+    }
+
+    if (comingSoonBadge) {
+        comingSoonBadge.hidden = true;
+    }
+
+    if (placeholderCard) {
+        placeholderCard.classList.add("runbooks-placeholder-card");
+    }
+
+    if (!description) return;
+
+    const status = runbook.incident_status || "INVESTIGATING";
+    const resolvedAt = runbook.resolved_at
+        ? formatIncidentDate(runbook.resolved_at)
+        : "Not recorded";
+
+    const rootCause =
+        runbook.root_cause || "Root cause information is not available.";
+
+    const evidence =
+        runbook.evidence_summary ||
+        "Evidence summary is not available.";
+
+    const mitigation =
+        runbook.mitigation ||
+        "No approved resolution has been recorded.";
+
+    const recoverySteps = [
+        "Review the incident evidence and confirm the suspected root cause.",
+        "Verify that the approved mitigation is appropriate for the affected service.",
+        `Apply the approved resolution: ${mitigation}`,
+        "Monitor service health, error rate, latency, and relevant dependencies.",
+        "Confirm that the service has returned to a stable operating state.",
+        "Record the recovery outcome before closing the incident."
+    ];
+
+    const verificationSteps = [
+        "Error rate returns toward the normal baseline.",
+        "Latency returns toward the expected operating range.",
+        "Affected service dependencies are healthy.",
+        "No new timeout or failure pattern is observed.",
+        "The approved mitigation has been successfully applied."
+    ];
+
+    let resolutionOutcome;
+
+    if (status === "RESOLVED") {
+        resolutionOutcome =
+            `Incident was marked RESOLVED on ${resolvedAt} after ` +
+            "human approval and recovery verification.";
+    } else if (status === "MITIGATION APPROVED") {
+        resolutionOutcome =
+            "The mitigation has been human-approved. " +
+            "Incident resolution still requires recovery verification.";
+    } else {
+        resolutionOutcome =
+            "Incident is still under investigation and does not have " +
+            "a completed approved resolution.";
+    }
+
+    const summary =
+        `This runbook captures the evidence-backed response for ` +
+        `${runbook.incident_id || "this incident"}. ` +
+        "It is intended to help on-call engineers and operations teams " +
+        "follow a consistent recovery approach for similar incidents.";
+
+    description.innerHTML = `
+        <div class="runbook-detail">
+
+            <div class="runbook-detail-topbar">
+                <button
+                    type="button"
+                    class="runbook-back-btn"
+                    id="runbookBackBtn"
+                >
+                    ← Back to Runbooks
+                </button>
+
+                <div class="runbook-detail-status-row">
+                    <span class="runbook-detail-status">
+                        ${escapeHtml(status)}
+                    </span>
+
+                    <span class="runbook-human-badge">
+                        ✓ HUMAN APPROVED
+                    </span>
+                </div>
+            </div>
+
+            <div class="runbook-detail-hero">
+                <span class="runbook-detail-service">
+                    ${escapeHtml(
+                        runbook.service_name || "UNKNOWN SERVICE"
+                    )}
+                </span>
+
+                <h2>
+                    ${escapeHtml(
+                        runbook.title ||
+                        "Incident Recovery Runbook"
+                    )}
+                </h2>
+
+                <p>
+                    ${escapeHtml(runbook.incident_id || "—")}
+                </p>
+            </div>
+
+            <section class="runbook-detail-section">
+                <div class="runbook-detail-section-heading">
+                    <span>01</span>
+                    <h3>Incident Summary</h3>
+                </div>
+
+                <p>
+                    ${escapeHtml(evidence)}
+                </p>
+            </section>
+
+            <section class="runbook-detail-section">
+                <div class="runbook-detail-section-heading">
+                    <span>02</span>
+                    <h3>Root Cause</h3>
+                </div>
+
+                <p>
+                    ${escapeHtml(rootCause)}
+                </p>
+            </section>
+
+            <section class="runbook-detail-section">
+                <div class="runbook-detail-section-heading">
+                    <span>03</span>
+                    <h3>Evidence</h3>
+                </div>
+
+                <div class="runbook-evidence-box">
+                    ${escapeHtml(evidence)}
+                </div>
+            </section>
+
+            <section class="runbook-detail-section runbook-resolution-section">
+                <div class="runbook-detail-section-heading">
+                    <span>04</span>
+                    <h3>Approved Resolution</h3>
+                </div>
+
+                <div class="runbook-approved-resolution">
+                    <strong>Human-approved mitigation</strong>
+                    <p>
+                        ${escapeHtml(mitigation)}
+                    </p>
+                </div>
+            </section>
+
+            <section class="runbook-detail-section">
+                <div class="runbook-detail-section-heading">
+                    <span>05</span>
+                    <h3>Recovery Steps</h3>
+                </div>
+
+                <ol class="runbook-step-list">
+                    ${recoverySteps.map((step, index) => `
+                        <li>
+                            <span class="runbook-step-number">
+                                ${index + 1}
+                            </span>
+                            <span>
+                                ${escapeHtml(step)}
+                            </span>
+                        </li>
+                    `).join("")}
+                </ol>
+            </section>
+
+            <section class="runbook-detail-section">
+                <div class="runbook-detail-section-heading">
+                    <span>06</span>
+                    <h3>Verification</h3>
+                </div>
+
+                <ul class="runbook-check-list">
+                    ${verificationSteps.map(step => `
+                        <li>
+                            <span>✓</span>
+                            ${escapeHtml(step)}
+                        </li>
+                    `).join("")}
+                </ul>
+            </section>
+
+            <section class="runbook-detail-section">
+                <div class="runbook-detail-section-heading">
+                    <span>07</span>
+                    <h3>Resolution Outcome</h3>
+                </div>
+
+                <p>
+                    ${escapeHtml(resolutionOutcome)}
+                </p>
+            </section>
+
+            <section class="runbook-detail-section runbook-summary-section">
+                <div class="runbook-detail-section-heading">
+                    <span>08</span>
+                    <h3>Runbook Summary</h3>
+                </div>
+
+                <p>
+                    ${escapeHtml(summary)}
+                </p>
+
+                <div class="runbook-detail-meta">
+                    <span>
+                        Created:
+                        ${escapeHtml(
+                            formatIncidentDate(runbook.created_at)
+                        )}
+                    </span>
+
+                    <span>
+                        Status:
+                        ${escapeHtml(status)}
+                    </span>
+                </div>
+            </section>
+
+            <div class="runbook-detail-disclaimer">
+                <strong>Human-in-the-loop:</strong>
+                Aegis records the approved mitigation and provides
+                recovery guidance. It does not claim to automatically
+                execute production remediation.
+            </div>
+
+        </div>
+    `;
+
+    const backButton = $("runbookBackBtn");
+
+    if (backButton) {
+        backButton.addEventListener("click", showRunbooksView);
+    }
 }
+
+
+async function showRunbooksView() {
+    if (!placeholderView) return;
+
+    hideAllViews();
+    placeholderView.hidden = false;
+
+    const eyebrow = $("placeholderEyebrow");
+    const title = $("placeholderTitle");
+    const subtitle = $("placeholderSubtitle");
+    const icon = $("placeholderIcon");
+    const heading = $("placeholderHeading");
+    const description = $("placeholderDescription");
+    const placeholderCard = $("placeholderCard");
+    const comingSoonBadge = $("comingSoonBadge");
+
+    if (eyebrow) {
+        eyebrow.textContent = "OPERATIONS";
+    }
+
+    if (title) {
+        title.textContent = "Runbooks Library";
+    }
+
+    if (subtitle) {
+        subtitle.textContent =
+            "Evidence-backed recovery procedures generated from incident RCA.";
+    }
+
+    if (icon) {
+        icon.textContent = "▣";
+    }
+
+    if (heading) {
+        heading.textContent = "Incident Recovery Runbooks";
+    }
+
+    if (placeholderCard) {
+        placeholderCard.classList.add("runbooks-placeholder-card");
+    }
+
+    if (comingSoonBadge) {
+        comingSoonBadge.hidden = true;
+    }
+
+    if (!description) return;
+
+    description.innerHTML = "Loading runbooks...";
+
+    try {
+        const response = await fetch("/incidents/runbooks?limit=50");
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const runbooks = await response.json();
+
+        if (!Array.isArray(runbooks) || runbooks.length === 0) {
+            description.innerHTML = `
+                <div class="runbook-empty">
+                    <strong>No runbooks created yet.</strong>
+                    <span>
+                        Generate an RCA, approve its mitigation, and
+                        create a runbook from the incident view.
+                    </span>
+                </div>
+            `;
+            return;
+        }
+
+        description.innerHTML = `
+            <div class="runbook-list">
+                ${runbooks.map(runbook => `
+                    <article
+                        class="runbook-card"
+                        data-incident-id="${escapeHtml(
+                            runbook.incident_id || ""
+                        )}"
+                        role="button"
+                        tabindex="0"
+                        title="Open ${
+                            escapeHtml(runbook.incident_id || "")
+                        } runbook"
+                    >
+                        <div class="runbook-card-header">
+                            <div>
+                                <span class="runbook-service">
+                                    ${escapeHtml(
+                                        runbook.service_name ||
+                                        "Unknown service"
+                                    )}
+                                </span>
+
+                                <h3>
+                                    ${escapeHtml(
+                                        runbook.title ||
+                                        "Incident Recovery Runbook"
+                                    )}
+                                </h3>
+                            </div>
+
+                            <span class="runbook-incident">
+                                ${escapeHtml(
+                                    runbook.incident_id || "—"
+                                )}
+                            </span>
+                        </div>
+
+                        <div class="runbook-library-row">
+                            <span class="runbook-label">
+                                ROOT CAUSE
+                            </span>
+
+                            <p>
+                                ${escapeHtml(
+                                    runbook.root_cause || "—"
+                                )}
+                            </p>
+                        </div>
+
+                        <div class="runbook-library-row">
+                            <span class="runbook-label">
+                                RESOLUTION
+                            </span>
+
+                            <p>
+                                ${escapeHtml(
+                                    runbook.mitigation || "—"
+                                )}
+                            </p>
+                        </div>
+
+                        <div class="runbook-footer">
+                            <span>
+                                ${escapeHtml(
+                                    runbook.incident_status ||
+                                    "INVESTIGATING"
+                                )}
+                            </span>
+
+                            <span class="runbook-status">
+                                VIEW RUNBOOK →
+                            </span>
+                        </div>
+                    </article>
+                `).join("")}
+            </div>
+        `;
+
+        description
+            .querySelectorAll(".runbook-card")
+            .forEach(card => {
+
+                const openRunbook = async () => {
+                    const incidentId = card.dataset.incidentId;
+
+                    if (!incidentId) return;
+
+                    try {
+                        const response = await fetch(
+                            "/incidents/runbooks?limit=50"
+                        );
+
+                        if (!response.ok) {
+                            throw new Error(
+                                `HTTP ${response.status}`
+                            );
+                        }
+
+                        const rows = await response.json();
+
+                        const runbook = rows.find(
+                            item =>
+                                item.incident_id === incidentId
+                        );
+
+                        if (!runbook) {
+                            throw new Error(
+                                `Runbook ${incidentId} not found`
+                            );
+                        }
+
+                        showRunbookDetail(runbook);
+
+                    } catch (error) {
+                        console.error(
+                            "Failed to open runbook:",
+                            error
+                        );
+
+                        showToast(
+                            `Unable to open ${incidentId} runbook`,
+                            "error"
+                        );
+                    }
+                };
+
+                card.addEventListener(
+                    "click",
+                    openRunbook
+                );
+
+                card.addEventListener(
+                    "keydown",
+                    event => {
+                        if (
+                            event.key === "Enter" ||
+                            event.key === " "
+                        ) {
+                            event.preventDefault();
+                            openRunbook();
+                        }
+                    }
+                );
+            });
+
+    } catch (error) {
+        console.error(
+            "Failed to load runbooks:",
+            error
+        );
+
+        description.innerHTML = `
+            <div class="runbook-empty">
+                <strong>Unable to load runbooks.</strong>
+                <span>
+                    ${escapeHtml(error.message)}
+                </span>
+            </div>
+        `;
+    }
+}
+
+
 
 function initializeIncidentFromUrl() {
     const hashIncidentId = window.location.hash.replace("#", "").trim();
